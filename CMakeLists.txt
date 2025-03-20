@@ -17,6 +17,7 @@ find_library(YAML_CPP_LIBRARY NAMES YAML_CPP PATHS ${YAML_CPP_LIBRARIES})
 find_package(catkin REQUIRED COMPONENTS
     roscpp
     roslib
+    rosbag
     std_msgs
     sensor_msgs
     message_runtime
@@ -85,6 +86,23 @@ target_link_libraries(PandarGeneralSDK
     pcap
 )
 
+###ImuSDK
+add_library(ImuSDK SHARED
+    src/IMU/src/imuSDK.cc
+)
+
+target_include_directories(ImuSDK PRIVATE
+    src/IMU/include/
+    src/IMU/src/
+    ${Boost_INCLUDE_DIRS}
+    ${catkin_INCLUDE_DIRS}
+)
+
+target_link_libraries(ImuSDK
+    ${Boost_LIBRARIES}
+    Boost::thread
+)
+
 ###hesai node
 add_executable(hesai_lidar_node
     src/main.cc
@@ -93,6 +111,7 @@ add_executable(hesai_lidar_node
 target_include_directories(hesai_lidar_node PRIVATE
     src/HesaiLidar_General_SDK/include
     src/HesaiLidar_General_SDK/src/PandarGeneralRaw/include
+    src/IMU/include
     ${PCL_INCLUDE_DIRS}
     ${catkin_INCLUDE_DIRS}
     ${Boost_INCLUDE_DIRS}
@@ -101,6 +120,7 @@ target_include_directories(hesai_lidar_node PRIVATE
 target_link_libraries(hesai_lidar_node 
     ${catkin_LIBRARIES}
     ${PCL_IO_LIBRARIES}
+    ImuSDK
     PandarGeneralSDK
 )
 
@@ -109,6 +129,7 @@ add_library(cloud_nodelet src/cloud_nodelet.cc)
 target_include_directories(cloud_nodelet PRIVATE
     src/HesaiLidar_General_SDK/include
     src/HesaiLidar_General_SDK/src/PandarGeneralRaw/include
+    src/IMU/include
     ${PCL_INCLUDE_DIRS}
     ${catkin_INCLUDE_DIRS}
     ${Boost_INCLUDE_DIRS}
@@ -118,12 +139,14 @@ target_link_libraries(cloud_nodelet
     ${catkin_LIBRARIES}
     ${PCL_IO_LIBRARIES}
     PandarGeneralSDK
+    ImuSDK
 )
 
 install(TARGETS
     hesai_lidar_node
     PandarGeneral
     PandarGeneralSDK
+    ImuSDK
     ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
     LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
     RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

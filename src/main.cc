@@ -1,11 +1,16 @@
 #include <ros/ros.h>
+#include "rosbag/bag.h"
 #include <image_transport/image_transport.h>
 #include <sensor_msgs/PointCloud2.h>
+#include <sensor_msgs/Imu.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/io/pcd_io.h>
 #include <pcl/point_types.h>
 #include "pandarGeneral_sdk/pandarGeneral_sdk.h"
+#include "imuSDK/imuSDK.h"
 #include <fstream>
+#include <mutex>
+
 // #define PRINT_FLAG 
 
 using namespace std;
@@ -17,6 +22,7 @@ public:
   {
     lidarPublisher = node.advertise<sensor_msgs::PointCloud2>("pandar", 10);
     packetPublisher = node.advertise<hesai_lidar::PandarScan>("pandar_packets",10);
+    imuPublisher = node.advertise<sensor_msgs::Imu>("imu", 10);
 
     string serverIp;
     int lidarRecvPort;
@@ -32,6 +38,8 @@ public:
     bool coordinateCorrectionFlag;
     string targetFrame;
     string fixedFrame;
+    string imuFile;
+    string recordFile;
 
     nh.getParam("pcap_file", pcapFile);
     nh.getParam("server_ip", serverIp);
@@ -49,6 +57,8 @@ public:
     nh.getParam("coordinate_correction_flag", coordinateCorrectionFlag);
     nh.getParam("target_frame", targetFrame);
     nh.getParam("fixed_frame", fixedFrame);
+    nh.getParam("record_file", recordFile);
+    nh.getParam("imu_file", imuFile);
   
     if(!pcapFile.empty()){
       hsdk = new PandarGeneralSDK(pcapFile, boost::bind(&HesaiLidarClient::lidarCallback, this, _1, _2, _3), \
@@ -100,25 +110,101 @@ public:
     } else {
         printf("create sdk fail\n");
     }
+
+    if (!imuFile.empty()){
+      imusdk = new ImuSDK(imuFile, boost::bind(&HesaiLidarClient::imuCallback, this, _1, _2));
+      if (imusdk != NULL){
+        imusdk->Start();
+      } else {
+        printf("IMU failed\n");
+      }
+    }
+
+    if (!recordFile.empty()){
+      bag.open(recordFile, rosbag::bagmode::Write);
+      if (bag.isOpen()) {
+          ROS_INFO("Bag opened successfully: %s", recordFile.c_str());
+          bag.setChunkThreshold(1024 * 1024 * 10);  // Set buffer size to 10 MB
+      } else {
+          ROS_ERROR("Failed to open bag: %s", recordFile.c_str());
+      }
+      
+    }
   }
 
-  void lidarCallback(boost::shared_ptr<PPointCloud> cld, double timestamp, hesai_lidar::PandarScanPtr scan) // the timestamp from first point cloud of cld
+  void lidarCallback(boost::shared_ptr<PPointCloud> cld, double timestamp, hesai_lidar::PandarScanPtr scan)
   {
-    if(m_sPublishType == "both" || m_sPublishType == "points"){
-      pcl_conversions::toPCL(ros::Time(timestamp), cld->header.stamp);
-      sensor_msgs::PointCloud2 output;
-      pcl::toROSMsg(*cld, output);
-      lidarPublisher.publish(output);
-#ifdef PRINT_FLAG
-        printf("timestamp: %f, point size: %ld.\n",timestamp, cld->points.size());
-#endif        
-    }
-    if(m_sPublishType == "both" || m_sPublishType == "raw"){
-      packetPublisher.publish(scan);
-#ifdef PRINT_FLAG
-        printf("raw size: %d.\n", scan->packets.size());
-#endif
-    }
+      if (m_sPublishType == "both" || m_sPublishType == "points") {
+          pcl_conversions::toPCL(ros::Time(timestamp), cld->header.stamp);
+          sensor_msgs::PointCloud2 output;
+          pcl::toROSMsg(*cld, output);
+          lidarPublisher.publish(output);
+  
+          // Synchronize access to the bag
+          std::lock_guard<std::mutex> lock(bag_mutex);
+          if (bag.isOpen()) {
+              try {
+                  bag.write("/hesai/pandar", ros::Time(timestamp), output);
+              } catch (rosbag::BagException& e) {
+                  ROS_ERROR("Failed to write to bag: %s", e.what());
+              }
+          }
+  #ifdef PRINT_FLAG
+          printf("timestamp: %f, point size: %ld.\n", timestamp, cld->points.size());
+  #endif        
+      }
+  
+      if (m_sPublishType == "both" || m_sPublishType == "raw") {
+          packetPublisher.publish(scan);
+  #ifdef PRINT_FLAG
+          printf("raw size: %d.\n", scan->packets.size());
+  #endif
+      }
+  }
+
+  void imuCallback(boost::shared_ptr<PIMUData> imu_data, double timestamp)
+  {
+      if (!imu_data) {
+          ROS_WARN("Received null IMU data.");
+          return;
+      }
+  
+      sensor_msgs::Imu imu_msg;
+      imu_msg.header.stamp = ros::Time(timestamp);
+      imu_msg.header.frame_id = "imu_link";  // Update based on your TF setup
+  
+      // Fill IMU message fields
+      imu_msg.linear_acceleration.x = imu_data->accel_x;
+      imu_msg.linear_acceleration.y = imu_data->accel_y;
+      imu_msg.linear_acceleration.z = imu_data->accel_z;
+  
+      imu_msg.angular_velocity.x = imu_data->gyro_x;
+      imu_msg.angular_velocity.y = imu_data->gyro_y;
+      imu_msg.angular_velocity.z = imu_data->gyro_z;
+  
+      imu_msg.orientation.w = imu_data->roll;
+      imu_msg.orientation.x = imu_data->pitch;
+      imu_msg.orientation.y = imu_data->yaw;
+      imu_msg.orientation.z = 1.0;
+  
+      imuPublisher.publish(imu_msg);
+  
+      // Synchronize access to the bag
+      std::lock_guard<std::mutex> lock(bag_mutex);
+      if (bag.isOpen()) {
+          try {
+              bag.write("/imu", ros::Time(timestamp), imu_msg);
+          } catch (rosbag::BagException& e) {
+              ROS_ERROR("Failed to write to bag: %s", e.what());
+          }
+      }
+  
+  #ifdef PRINT_FLAG
+      printf("IMU Timestamp: %f | Accel: (%.3f, %.3f, %.3f) | Gyro: (%.3f, %.3f, %.3f)\n",
+             timestamp,
+             imu_data->accel_x, imu_data->accel_y, imu_data->accel_z,
+             imu_data->gyro_x, imu_data->gyro_y, imu_data->gyro_z);
+  #endif    
   }
 
   void gpsCallback(int timestamp) {
@@ -133,13 +219,27 @@ public:
     hsdk->PushScanPacket(scan);
   }
 
+  ~HesaiLidarClient()
+  {
+      std::lock_guard<std::mutex> lock(bag_mutex);  // Synchronize access
+      if (bag.isOpen()) {
+          bag.close();
+          ROS_INFO("Bag closed successfully.");
+      }
+  }
+
+
 private:
   ros::Publisher lidarPublisher;
   ros::Publisher packetPublisher;
+  ros::Publisher imuPublisher;
   PandarGeneralSDK* hsdk;
+  ImuSDK* imusdk;
   string m_sPublishType;
   string m_sTimestampType;
   ros::Subscriber packetSubscriber;
+  rosbag::Bag bag;
+  std::mutex bag_mutex;
 };
 
 int main(int argc, char **argv)
