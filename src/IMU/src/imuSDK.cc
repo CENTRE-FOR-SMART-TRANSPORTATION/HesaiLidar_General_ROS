@@ -125,6 +125,13 @@ void ImuSDK::ReadIMUData() {
         double qx, qy, qz, qw;
         rpyToQuaternion(imu_data.roll, imu_data.pitch, imu_data.yaw, qx, qy, qz, qw);
 
+        // assigning the quaternion values
+        imu_data.qx = qx;
+        imu_data.qy = qy;
+        imu_data.qz = qz;
+        imu_data.qw = qw;
+
+
         // Create shared_ptr and call callback
         boost::shared_ptr<PIMUData> imu_ptr(new PIMUData(imu_data));
         imu_callback(imu_ptr, timestamp);

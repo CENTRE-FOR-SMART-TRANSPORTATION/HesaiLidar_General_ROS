@@ -20,9 +20,9 @@ class HesaiLidarClient
 public:
   HesaiLidarClient(ros::NodeHandle node, ros::NodeHandle nh)
   {
-    lidarPublisher = node.advertise<sensor_msgs::PointCloud2>("pandar", 10);
+    lidarPublisher = node.advertise<sensor_msgs::PointCloud2>("hesai/pandar", 10);
     packetPublisher = node.advertise<hesai_lidar::PandarScan>("pandar_packets",10);
-    imuPublisher = node.advertise<sensor_msgs::Imu>("imu", 10);
+    imuPublisher = node.advertise<sensor_msgs::Imu>("imu_raw", 10);
 
     string serverIp;
     int lidarRecvPort;
@@ -182,11 +182,15 @@ public:
       imu_msg.angular_velocity.y = imu_data->gyro_y;
       imu_msg.angular_velocity.z = imu_data->gyro_z;
   
-      imu_msg.orientation.w = imu_data->roll;
-      imu_msg.orientation.x = imu_data->pitch;
-      imu_msg.orientation.y = imu_data->yaw;
-      imu_msg.orientation.z = 1.0;
-  
+      imu_msg.orientation.w = imu_data->qw;
+      imu_msg.orientation.x = imu_data->qx;
+      imu_msg.orientation.y = imu_data->qy;
+      imu_msg.orientation.z = imu_data->qz;
+
+      imu_msg.orientation_covariance = {0.01, 0, 0, 0, 0.01, 0, 0, 0, 0.01};
+      imu_msg.angular_velocity_covariance = {0.01, 0, 0, 0, 0.01, 0, 0, 0, 0.01};
+      imu_msg.linear_acceleration_covariance = {0.01, 0, 0, 0, 0.01, 0, 0, 0, 0.01};
+
       imuPublisher.publish(imu_msg);
   
       // Synchronize access to the bag

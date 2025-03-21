@@ -11,6 +11,8 @@ struct PIMUData {
     double accel_x, accel_y, accel_z;       // Linear Acceleration (m/s²)
     double gyro_x, gyro_y, gyro_z;          // Angular Velocity (rad/s)
     double roll, pitch, yaw;                // Orientation (degrees)
+    double qx, qy, qz, qw;                 // Quaternion for orientation
+    std::array<double, 9> orientation_covariance, angular_velocity_covariance, linear_acceleration_covariance;
 };
 
 // IMU Data Container (similar to PPointCloud but for IMU)

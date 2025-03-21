@@ -1,5 +1,5 @@
 <launch>
-	<arg name="pcap_file"  default="/home/krupal/Desktop/data/March_7_1/Mar7_test.pcap"/>
+	<arg name="pcap_file"  default="/home/cst/Desktop/March_7_1/Mar7_test.pcap"/>
 	<arg name="server_ip" default="192.168.1.201"/>
 	<arg name="lidar_recv_port"  default="2368"/>
 	<arg name="gps_port"  default="10110"/>
@@ -18,8 +18,8 @@
 	<arg name="coordinate_correction_flag"  default="false"/>
 	<arg name="fixed_frame"  default=""/>
 	<arg name="target_frame"  default=""/>
-	<arg name="record_file" default="" />
-	<arg name="imu_file" default="" />
+	<arg name="record_file" default="/home/cst/Desktop/March_7_1.bag" />
+	<arg name="imu_file" default="/home/cst/Desktop/March_7_1/2025-03-07-13-43-46.csv" />
 
 	<node pkg="hesai_lidar" name="hesai_lidar" ns="$(arg namespace)" type="hesai_lidar_node" output="screen" >
 		<param name="pcap_file" type="string" value="$(arg pcap_file)"/>
