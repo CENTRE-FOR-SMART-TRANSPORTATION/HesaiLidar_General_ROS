@@ -5,8 +5,8 @@
 #define EARTH_RADIUS 6371000
 
 // Constructor
-ImuSDK::ImuSDK(std::string imu_path, boost::function<void(boost::shared_ptr<PIMUData>, double)> imu_callback)
-    : imu_path(imu_path), imu_callback(imu_callback), running(false) {}
+ImuSDK::ImuSDK(std::string imu_path, boost::function<void(boost::shared_ptr<PIMUData>, double)> imu_callback, bool imu_file_has_gps)
+    : imu_path(imu_path), imu_callback(imu_callback),imu_file_has_gps(imu_file_has_gps), running(false) {}
 
 // Destructor
 ImuSDK::~ImuSDK() {
@@ -103,8 +103,45 @@ void ImuSDK::ReadIMUData() {
         std::getline(ss, value, ','); imu_data.gyro_z = safeStod(value);
         std::getline(ss, value, ','); imu_data.roll = safeStod(value);
         std::getline(ss, value, ','); imu_data.pitch = safeStod(value);
+        // std::getline(ss, value, ','); /* Ignore original_yaw */
+        std::getline(ss, value, ','); imu_data.yaw = safeStod(value);
+
+        if (imu_file_has_gps) {
+            // Read values from CSV (indexing based on your format)
+        std::getline(ss, value, ','); timestamp = safeStod(value);  // time
+        std::getline(ss, value, ','); /* Ignore system_time */
+        std::getline(ss, value, ','); lat = safeStod(value);  // latitude
+        std::getline(ss, value, ','); lon = safeStod(value);  // longitude
+        std::getline(ss, value, ','); imu_data.altitude = safeStod(value);  // altitude
+        std::getline(ss, value, ','); /* Ignore azimuth */
+        std::getline(ss, value, ','); /* Ignore mode */
+        std::getline(ss, value, ','); /* Ignore satellites */
+        std::getline(ss, value, ','); /* Ignore Time */
+        std::getline(ss, value, ','); imu_data.accel_x = safeStod(value);
+        std::getline(ss, value, ','); imu_data.accel_y = safeStod(value);
+        std::getline(ss, value, ','); imu_data.accel_z = safeStod(value);
+        std::getline(ss, value, ','); imu_data.gyro_x = safeStod(value);
+        std::getline(ss, value, ','); imu_data.gyro_y = safeStod(value);
+        std::getline(ss, value, ','); imu_data.gyro_z = safeStod(value);
+        std::getline(ss, value, ','); imu_data.roll = safeStod(value);
+        std::getline(ss, value, ','); imu_data.pitch = safeStod(value);
         std::getline(ss, value, ','); /* Ignore original_yaw */
         std::getline(ss, value, ','); imu_data.yaw = safeStod(value);
+        }
+        else if (!imu_file_has_gps) {
+            // no gps values in the files
+        std::getline(ss, value, ','); timestamp = safeStod(value);  // time
+        lat = lon = imu_data.altitude = 0;  // No GPS data available
+        std::getline(ss, value, ','); imu_data.accel_x = safeStod(value);
+        std::getline(ss, value, ','); imu_data.accel_y = safeStod(value);
+        std::getline(ss, value, ','); imu_data.accel_z = safeStod(value);
+        std::getline(ss, value, ','); imu_data.gyro_x = safeStod(value);
+        std::getline(ss, value, ','); imu_data.gyro_y = safeStod(value);
+        std::getline(ss, value, ','); imu_data.gyro_z = safeStod(value);
+        std::getline(ss, value, ','); imu_data.roll = safeStod(value);
+        std::getline(ss, value, ','); imu_data.pitch = safeStod(value);
+        std::getline(ss, value, ','); imu_data.yaw = safeStod(value);
+        }
 
         // Check if any of the values are NaN (invalid)
         if (std::isnan(timestamp) || std::isnan(lat) || std::isnan(lon) || std::isnan(imu_data.altitude) ||
@@ -117,9 +154,11 @@ void ImuSDK::ReadIMUData() {
 
 
         // Convert lat/lon to meters
+        if (imu_file_has_gps) {
         latLonToMeters(lat, lon, x_meters, y_meters);
         imu_data.latitude = x_meters;
         imu_data.longitude = y_meters;
+        }
 
         // Convert roll, pitch, yaw to quaternion
         double qx, qy, qz, qw;

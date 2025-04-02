@@ -11,6 +11,8 @@
 #include <fstream>
 #include <mutex>
 
+std::vector<sensor_msgs::Imu> imu_buffer;  // Buffer to hold IMU messages
+const size_t BUFFER_SIZE = 100;  // Threshold for the number of IMU messages to write at once
 // #define PRINT_FLAG 
 
 using namespace std;
@@ -40,6 +42,7 @@ public:
     string fixedFrame;
     string imuFile;
     string recordFile;
+    bool gpsFlag;
 
     nh.getParam("pcap_file", pcapFile);
     nh.getParam("server_ip", serverIp);
@@ -59,6 +62,7 @@ public:
     nh.getParam("fixed_frame", fixedFrame);
     nh.getParam("record_file", recordFile);
     nh.getParam("imu_file", imuFile);
+    nh.getParam("imu_file_has_gps",gpsFlag);
   
     if(!pcapFile.empty()){
       hsdk = new PandarGeneralSDK(pcapFile, boost::bind(&HesaiLidarClient::lidarCallback, this, _1, _2, _3), \
@@ -112,7 +116,7 @@ public:
     }
 
     if (!imuFile.empty()){
-      imusdk = new ImuSDK(imuFile, boost::bind(&HesaiLidarClient::imuCallback, this, _1, _2));
+      imusdk = new ImuSDK(imuFile, boost::bind(&HesaiLidarClient::imuCallback, this, _1, _2),gpsFlag);
       if (imusdk != NULL){
         imusdk->Start();
       } else {
@@ -194,14 +198,38 @@ public:
       imuPublisher.publish(imu_msg);
   
       // Synchronize access to the bag
-      std::lock_guard<std::mutex> lock(bag_mutex);
-      if (bag.isOpen()) {
-          try {
-              bag.write("/imu", ros::Time(timestamp), imu_msg);
-          } catch (rosbag::BagException& e) {
-              ROS_ERROR("Failed to write to bag: %s", e.what());
+      // std::lock_guard<std::mutex> lock(bag_mutex);
+      // if (bag.isOpen()) {
+      //     try {
+      //         bag.write("/imu", ros::Time(timestamp), imu_msg);
+      //     } catch (rosbag::BagException& e) {
+      //         ROS_ERROR("Failed to write to bag: %s", e.what());
+      //     }
+      // }
+
+      // Add IMU message to the buffer
+    imu_buffer.push_back(imu_msg);
+
+    // Check if the buffer size has reached the threshold
+    if (imu_buffer.size() >= BUFFER_SIZE) {
+        // Lock to ensure thread-safe access to the rosbag
+        printf("Buffer size %d \n", imu_buffer.size());
+
+        std::lock_guard<std::mutex> lock(bag_mutex);
+        if (bag.isOpen()){
+        // Write all buffered IMU messages to the bag
+          for (const auto& imu_iterate : imu_buffer) {
+              try {
+                  bag.write("/imu", imu_iterate.header.stamp, imu_iterate);
+              } catch (const rosbag::BagException& e) {
+                  ROS_ERROR("Failed to write IMU data to bag: %s", e.what());
+              }
           }
-      }
+        }
+        // Clear the buffer after writing
+        imu_buffer.clear();
+    }
+
   
   #ifdef PRINT_FLAG
       printf("IMU Timestamp: %f | Accel: (%.3f, %.3f, %.3f) | Gyro: (%.3f, %.3f, %.3f)\n",

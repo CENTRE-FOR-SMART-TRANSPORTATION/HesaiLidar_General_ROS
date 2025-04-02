@@ -18,7 +18,7 @@
 class ImuSDK
 {
 public:
-    ImuSDK(std::string imu_path, boost::function<void(boost::shared_ptr<PIMUData>, double)> imu_callback);
+    ImuSDK(std::string imu_path, boost::function<void(boost::shared_ptr<PIMUData>, double)> imu_callback, bool imu_file_has_gps);
     ~ImuSDK();
 
     void Start();
@@ -31,6 +31,7 @@ private:
     boost::function<void(boost::shared_ptr<PIMUData>, double)> imu_callback;
     std::thread imu_thread;
     std::atomic<bool> running;
+    bool imu_file_has_gps;
 };
 
 #endif // INCLUDE_PANDARGENERAL_H_
